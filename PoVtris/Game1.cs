@@ -240,10 +240,10 @@ namespace Tetris
         {
             GraphicsDevice.Clear(Color.DarkGray);
 
-            Matrix Projection = Matrix.CreateOrthographicOffCenter(0, 10, 20, 0, -1, 1);
+            Matrix Projection = Matrix.CreateOrthographicOffCenter(0, 10, 22, 2, -1, 1);
             basicEffect.Projection = Projection;
 
-            TetrisState.Draw(basicEffect);
+            TetrisState.Draw(basicEffect, gameTime);
 
             base.Draw(gameTime);
         }
