@@ -15,7 +15,7 @@ namespace Tetris
 
         Random r = new Random();
 
-        public bool[,] Grid = new bool[Width, Height];
+        public Color[,] Grid = new Color[Width, Height];
 
         public void Initialize(GraphicsDevice graphicsDevice)
         {
@@ -28,46 +28,55 @@ namespace Tetris
 
         public Tetromino current = null;
         public LinkedList<Tetromino> Tetrominoes = new LinkedList<Tetromino>();
-        public Dictionary<Tuple<int, int>, HashSet<Transition>> Transistions = new Dictionary<Tuple<int, int>, HashSet<Transition>>();
+        public Dictionary<Tuple<int, int>, LinkedList<Transition>> Transistions = new Dictionary<Tuple<int, int>, LinkedList<Transition>>();
+
+        public bool GameOver = false;
 
         public bool Update()
         {
-            bool gameOver = false;
-            if (current == null)
+            if (!GameOver)
             {
-                current = new Tetromino(this);
-                List<Tetromino.Shapes> shapeNames = Tetromino.Structures.Keys.ToList();
-                Tetromino.Shapes newShape = shapeNames[r.Next(shapeNames.Count)];
-                current.Spawn(newShape, 3, 0, r.Next(4));
-            }
-            else
-            {
-                bool done = current.MoveDown();
-                if (done)
+                if (current == null)
                 {
-                    for (int i = 0; i < 3; i++)
-                    {
-                        for (int j = 0; j < Width; j++)
-                        {
-                            if (Grid[j, i])
-                            {
-                                gameOver = true;
-                                break;
-                            }
-                        }
-                        if (gameOver)
-                            break;
-                    }
-
-                    ClearFullLines();
-
                     current = new Tetromino(this);
                     List<Tetromino.Shapes> shapeNames = Tetromino.Structures.Keys.ToList();
                     Tetromino.Shapes newShape = shapeNames[r.Next(shapeNames.Count)];
                     current.Spawn(newShape, 3, 0, r.Next(4));
                 }
+                else
+                {
+                    bool done = current.MoveDown();
+                    if (done)
+                    {
+                        for (int i = 0; i < 3; i++)
+                        {
+                            for (int j = 0; j < Width; j++)
+                            {
+                                if (Grid[j, i] != Color.Transparent)
+                                {
+                                    GameOver = true;
+                                    break;
+                                }
+                            }
+                            if (GameOver)
+                                break;
+                        }
+
+                        ClearFullLines();
+
+                        current = new Tetromino(this);
+                        List<Tetromino.Shapes> shapeNames = Tetromino.Structures.Keys.ToList();
+                        Tetromino.Shapes newShape = shapeNames[r.Next(shapeNames.Count)];
+                        current.Spawn(newShape, 3, 0, r.Next(4));
+                    }
+                }
             }
-            return gameOver;
+            return GameOver;
+        }
+
+        public void ReIndexTransitions(int x, int y)
+        {
+
         }
 
         public void Draw(BasicEffect basicEffect, GameTime gametime)
@@ -85,75 +94,76 @@ namespace Tetris
 
             GraphicsDevice device = basicEffect.GraphicsDevice;
 
-            foreach (Tetromino t in Tetrominoes)
+            float gameTimeSeconds = (float)gametime.TotalGameTime.TotalSeconds;
+
+            for (int x = 0; x < Width; x++)
             {
-                for (int x = 0; x < 4; x++)
+                for (int y = 0; y < Height; y++)
                 {
-                    for (int y = 0; y < 4; y++)
+                    if (Grid[x, y] != Color.Transparent)
                     {
-                        if (t.Structure[x, y])
+                        VertexPositionColor[] square = new VertexPositionColor[8];
+
+                        Color fill = Grid[x, y];
+                        Color outline = OutlineColours[fill];
+
+                        const float borderWidth = 0.05f;
+
+                        float drawX = x;
+                        float drawY = y;
+                        float rotationAngle = 0;
+                        Vector2 rotationCenter = Vector2.Zero;
+
+                        Tuple<int, int> XY = Tuple.Create(x, y);
+
+                        if (Transistions.ContainsKey(XY))
                         {
-                            VertexPositionColor[] square = new VertexPositionColor[8];
+                            float scale = 1.0f / Transistions[XY].Count;
+                            Transition tr = Transistions[XY].First();
+                            if (tr.TransitionStartTime == 0)
+                                tr.TransitionStartTime = gameTimeSeconds;
 
-                            Color fill = t.Color;
-                            Color outline = OutlineColours[fill];
-
-                            const float borderWidth = 0.05f;
-
-                            float drawX = t.X + x;
-                            float drawY = t.Y + y;
-                            float rotationAngle = 0;
-                            Vector2 rotationCenter = Vector2.Zero;
-
-                            Tuple<int, int> XY = Tuple.Create(t.X + x, t.Y + y);
-
-                            if (Transistions.ContainsKey(XY))
+                            if ((gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime > 1)
+                                Transistions[XY].Remove(tr);
+                            else
                             {
-                                List<Transition> toRemove = new List<Transition>();
-                                foreach (Transition tr in Transistions[XY])
+                                if (tr is RotationTransition)
                                 {
-                                    if (tr.TransitionStartTime == 0)
-                                        tr.TransitionStartTime = gametime.TotalGameTime.Seconds;
-
-                                    if (tr is RotationTransition)
-                                    {
-                                        RotationTransition tRotate = tr as RotationTransition;
-                                        rotationCenter = tRotate.Center;
-                                        rotationAngle = -tRotate.StartAngle * (float)Math.PI * (0.5f) * (gametime.TotalGameTime.Seconds - tr.TransitionStartTime) / tr.TransitionTime;
-                                    }
-                                    else if (tr is TranslationTransition)
-                                    {
-                                        TranslationTransition tTranslate = tr as TranslationTransition;
-                                        drawX = tTranslate.StartX + (t.X - tTranslate.StartX) * (gametime.TotalGameTime.Seconds - tr.TransitionStartTime) / tr.TransitionTime;
-                                        drawY = tTranslate.StartY + (t.Y - tTranslate.StartY) * (gametime.TotalGameTime.Seconds - tr.TransitionStartTime) / tr.TransitionTime;
-                                    }
+                                    RotationTransition tRotate = tr as RotationTransition;
+                                    rotationCenter = tRotate.Center;
+                                    rotationAngle = tRotate.StartAngle * (float)Math.PI * (0.5f) * (gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime;
                                 }
-                                Transistions[XY].RemoveWhere(m => toRemove.Contains(m));
-                                if (Transistions[XY].Count == 0)
-                                    Transistions.Remove(XY);
+                                else if (tr is TranslationTransition)
+                                {
+                                    TranslationTransition tTranslate = tr as TranslationTransition;
+                                    drawX = tTranslate.StartX + (x - tTranslate.StartX) * (gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime;
+                                    drawY = tTranslate.StartY + (y - tTranslate.StartY) * (gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime;
+                                }
                             }
+                            if (Transistions[XY].Count == 0)
+                                Transistions.Remove(XY);
+                        }
 
-                            basicEffect.World = Matrix.CreateTranslation(new Vector3(-rotationCenter, 0)) * Matrix.CreateRotationZ(rotationAngle) * Matrix.CreateTranslation(new Vector3(rotationCenter, 0));
+                        basicEffect.World = Matrix.CreateTranslation(new Vector3(-rotationCenter, 0)) * Matrix.CreateRotationZ(rotationAngle) * Matrix.CreateTranslation(new Vector3(rotationCenter, 0));
 
-                            square[0] = new VertexPositionColor(new Vector3(drawX, drawY, 0), outline);
-                            square[1] = new VertexPositionColor(new Vector3(drawX + 1, drawY, 0), outline);
-                            square[2] = new VertexPositionColor(new Vector3(drawX + 1, drawY + 1, 0), outline);
-                            square[3] = new VertexPositionColor(new Vector3(drawX, drawY + 1, 0), outline);
+                        square[0] = new VertexPositionColor(new Vector3(drawX, drawY, 0), outline);
+                        square[1] = new VertexPositionColor(new Vector3(drawX + 1, drawY, 0), outline);
+                        square[2] = new VertexPositionColor(new Vector3(drawX + 1, drawY + 1, 0), outline);
+                        square[3] = new VertexPositionColor(new Vector3(drawX, drawY + 1, 0), outline);
 
-                            square[4] = new VertexPositionColor(new Vector3(drawX + borderWidth, drawY + borderWidth, 0), fill);
-                            square[5] = new VertexPositionColor(new Vector3(drawX + 1 - borderWidth, drawY + borderWidth, 0), fill);
-                            square[6] = new VertexPositionColor(new Vector3(drawX + 1 - borderWidth, drawY + 1 - borderWidth, 0), fill);
-                            square[7] = new VertexPositionColor(new Vector3(drawX + borderWidth, drawY + 1 - borderWidth, 0), fill);
+                        square[4] = new VertexPositionColor(new Vector3(drawX + borderWidth, drawY + borderWidth, 0), fill);
+                        square[5] = new VertexPositionColor(new Vector3(drawX + 1 - borderWidth, drawY + borderWidth, 0), fill);
+                        square[6] = new VertexPositionColor(new Vector3(drawX + 1 - borderWidth, drawY + 1 - borderWidth, 0), fill);
+                        square[7] = new VertexPositionColor(new Vector3(drawX + borderWidth, drawY + 1 - borderWidth, 0), fill);
 
-                            short[] index = new short[] { 0, 1, 3, 2 };
+                        short[] index = new short[] { 0, 1, 3, 2 };
 
-                            foreach (EffectPass pass in basicEffect.CurrentTechnique.Passes)
-                            {
-                                pass.Apply();
+                        foreach (EffectPass pass in basicEffect.CurrentTechnique.Passes)
+                        {
+                            pass.Apply();
 
-                                device.DrawUserIndexedPrimitives(PrimitiveType.TriangleStrip, square, 0, 4, index, 0, 2); //outline
-                                device.DrawUserIndexedPrimitives(PrimitiveType.TriangleStrip, square, 4, 4, index, 0, 2); //fill
-                            }
+                            device.DrawUserIndexedPrimitives(PrimitiveType.TriangleStrip, square, 0, 4, index, 0, 2); //outline
+                            device.DrawUserIndexedPrimitives(PrimitiveType.TriangleStrip, square, 4, 4, index, 0, 2); //fill
                         }
                     }
                 }
@@ -169,7 +179,7 @@ namespace Tetris
                 bool full = true;
                 for (int x = 0; x < Width; x++)
                 {
-                    if (!Grid[x, y])
+                    if (Grid[x, y] == Color.Transparent)
                     {
                         full = false;
                         break;
@@ -203,7 +213,7 @@ namespace Tetris
             while (lookingAtY >= 0)
             {
                 for (int i = 0; i < Width; i++)
-                    Grid[i, lookingAtY] = false;
+                    Grid[i, lookingAtY] = Color.Transparent;
                 lookingAtY--;
             }
             return new int[1];

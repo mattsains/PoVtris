@@ -11,12 +11,13 @@ namespace Tetris
     {
         public float TransitionTime;
         public float TransitionStartTime;
-        Tuple<int, int> TargetBlockPosition;
+        Tuple<int, int> FinalBlockTargetPosition;
         public Tetris TetrisState;
-        public Transition(Tetris tetrisState, Tuple<int, int> targetBlockPosition, float time, bool noAdd = false)
+
+        public Transition(Tetris tetrisState, Tuple<int, int> finalBlockTargetPosition, float time, bool noAdd = false)
         {
             this.TetrisState = tetrisState;
-            this.TargetBlockPosition = targetBlockPosition;
+            this.FinalBlockTargetPosition = finalBlockTargetPosition;
             this.TransitionTime = time;
             if (!noAdd)
             {
@@ -26,16 +27,16 @@ namespace Tetris
 
         public void Register()
         {
-            if (!TetrisState.Transistions.ContainsKey(TargetBlockPosition))
-                TetrisState.Transistions.Add(TargetBlockPosition, new HashSet<Transition>());
-            TetrisState.Transistions[TargetBlockPosition].Add(this);
+            if (!TetrisState.Transistions.ContainsKey(FinalBlockTargetPosition))
+                TetrisState.Transistions.Add(FinalBlockTargetPosition, new LinkedList<Transition>());
+            TetrisState.Transistions[FinalBlockTargetPosition].AddLast(this);
         }
 
         public void Done()
         {
-            TetrisState.Transistions[TargetBlockPosition].Remove(this);
-            if (TetrisState.Transistions[TargetBlockPosition].Count == 0)
-                TetrisState.Transistions.Remove(TargetBlockPosition);
+            TetrisState.Transistions[FinalBlockTargetPosition].Remove(this);
+            if (TetrisState.Transistions[FinalBlockTargetPosition].Count == 0)
+                TetrisState.Transistions.Remove(FinalBlockTargetPosition);
         }
     }
 
@@ -44,12 +45,12 @@ namespace Tetris
     /// </summary>
     class RotationTransition : Transition
     {
-        public int StartAngle, CurrentAngle;
+        public int StartAngle;
         public Vector2 Center;
-        public RotationTransition(Tetris tetrisState, Tuple<int, int> targetBlockPosition, Vector2 center, int startAngle, float time, bool noAdd = false)
-            : base(tetrisState, targetBlockPosition, time, noAdd)
+        public RotationTransition(Tetris tetrisState, Tuple<int, int> finalBlockTargetPosition, Vector2 center, int startAngle, float time, bool noAdd = false)
+            : base(tetrisState, finalBlockTargetPosition, time, noAdd)
         {
-            this.StartAngle = this.CurrentAngle = startAngle;
+            this.StartAngle = startAngle;
             this.Center = center;
         }
 
@@ -68,19 +69,19 @@ namespace Tetris
 
     class TranslationTransition : Transition
     {
-        public int StartX, StartY, CurrentX, CurrentY;
-        public TranslationTransition(Tetris tetrisState, Tuple<int, int> targetBlockPosition, int startX, int startY, float time, bool noAdd = false)
-            : base(tetrisState, targetBlockPosition, time, noAdd)
+        public int StartX, StartY;
+        public TranslationTransition(Tetris tetrisState, Tuple<int, int> finalBlockTargetPosition, int startX, int startY, float time, bool noAdd = false)
+            : base(tetrisState, finalBlockTargetPosition, time, noAdd)
         {
-            this.StartX = this.CurrentX = startX;
-            this.StartY = this.CurrentY = startY;
+            this.StartX = startX;
+            this.StartY = startY;
         }
 
         public static void FromRow(Tetris tetrisState, int startRow, int targetRow, float time, bool noAdd = false)
         {
             for (int i = 0; i < Tetris.Width; i++)
             {
-                if (tetrisState.Grid[i, targetRow])
+                if (tetrisState.Grid[i, targetRow] != Color.Transparent)
                 {
                     new TranslationTransition(tetrisState, Tuple.Create(i, targetRow), i, startRow, time, noAdd);
                 }

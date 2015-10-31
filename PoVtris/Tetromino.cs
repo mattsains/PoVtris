@@ -11,7 +11,7 @@ namespace Tetris
     {
         public enum Shapes { I, S, Z, O, L, J, T };
 
-        const float TransitionTime = 2f;
+        const float TransitionTime = 0.1f;
 
         const bool t = true, f = false;
         public static readonly Dictionary<Shapes, bool[,]> Structures = new Dictionary<Shapes, bool[,]>()
@@ -142,7 +142,7 @@ namespace Tetris
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
                     if (Structure[i, j])
-                        TetrisState.Grid[i + X, j + Y] = true;
+                        TetrisState.Grid[i + X, j + Y] = Color;
 
             TetrisState.Tetrominoes.AddLast(this);
         }
@@ -249,7 +249,7 @@ namespace Tetris
                 for (int x = 0; x < 4; x++)
                 {
 
-                    if (Y + bottoms[x] == Tetris.Height || (bottoms[x] != 0 && TetrisState.Grid[X + x, Y + bottoms[x]]))
+                    if (Y + bottoms[x] == Tetris.Height || (bottoms[x] != 0 && TetrisState.Grid[X + x, Y + bottoms[x]] != Color.Transparent))
                         return true;
                 }
 
@@ -258,13 +258,13 @@ namespace Tetris
                 for (int x = 0; x < 4; x++)
                     for (int y = 0; y < 4; y++)
                         if (Structure[x, y])
-                            TetrisState.Grid[x + X, y + Y] = false;
+                            TetrisState.Grid[x + X, y + Y] = Color.Transparent;
                 Y++;
 
                 for (int i = 0; i < 4; i++)
                     for (int j = 0; j < 4; j++)
                         if (Structure[i, j])
-                            TetrisState.Grid[i + X, j + Y] = true;
+                            TetrisState.Grid[i + X, j + Y] = Color;
 
                 TranslationTransition.FromTetromino(TetrisState, this, X, Y - 1, TransitionTime);
             }
@@ -277,19 +277,19 @@ namespace Tetris
         {
             int[] lefts = FindLeftSurfaces(Structure);
             for (int y = 0; y < 4; y++)
-                if (lefts[y] != 4 && (lefts[y] + X < 0 || TetrisState.Grid[X + lefts[y], Y + y]))
+                if (lefts[y] != 4 && (lefts[y] + X < 0 || TetrisState.Grid[X + lefts[y], Y + y] != Color.Transparent))
                     return;
 
             for (int x = 0; x < 4; x++)
                 for (int y = 0; y < 4; y++)
                     if (Structure[x, y])
-                        TetrisState.Grid[x + X, y + Y] = false;
+                        TetrisState.Grid[x + X, y + Y] = Color.Transparent;
             X--;
 
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
                     if (Structure[i, j])
-                        TetrisState.Grid[i + X, j + Y] = true;
+                        TetrisState.Grid[i + X, j + Y] = Color;
 
             TranslationTransition.FromTetromino(TetrisState, this, X + 1, Y, TransitionTime);
         }
@@ -298,19 +298,19 @@ namespace Tetris
         {
             int[] rights = FindRightSurfaces(Structure);
             for (int y = 0; y < 4; y++)
-                if (rights[y] != -1 && (rights[y] + X >= Tetris.Width || TetrisState.Grid[X + rights[y], Y + y]))
+                if (rights[y] != -1 && (rights[y] + X >= Tetris.Width || TetrisState.Grid[X + rights[y], Y + y] != Color.Transparent))
                     return;
 
             for (int x = 0; x < 4; x++)
                 for (int y = 0; y < 4; y++)
                     if (Structure[x, y])
-                        TetrisState.Grid[x + X, y + Y] = false;
+                        TetrisState.Grid[x + X, y + Y] = Color.Transparent;
             X++;
 
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
                     if (Structure[i, j])
-                        TetrisState.Grid[i + X, j + Y] = true;
+                        TetrisState.Grid[i + X, j + Y] = Color;
 
             TranslationTransition.FromTetromino(TetrisState, this, X - 1, Y, TransitionTime);
         }
@@ -322,7 +322,7 @@ namespace Tetris
             for (int x = 0; x < 4; x++)
                 for (int y = 0; y < 4; y++)
                     if (Structure[x, y])
-                        TetrisState.Grid[x + X, y + Y] = false;
+                        TetrisState.Grid[x + X, y + Y] = Color.Transparent;
 
             bool[,] candidateStructure = Rotate(Structure, left ? 1 : 3);
 
@@ -344,7 +344,7 @@ namespace Tetris
             bool failure = false;
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
-                    if (candidateStructure[i, j] && TetrisState.Grid[i + X, j + Y])
+                    if (candidateStructure[i, j] && TetrisState.Grid[i + X, j + Y] != Color.Transparent)
                     {
                         failure = true;
                         break;
@@ -357,7 +357,7 @@ namespace Tetris
                 for (int i = 0; i < 4; i++)
                     for (int j = 0; j < 4; j++)
                         if (Structure[i, j])
-                            TetrisState.Grid[i + X, j + Y] = true;
+                            TetrisState.Grid[i + X, j + Y] = Color;
                 if (oldX != X || oldY != Y)
                     TranslationTransition.FromTetromino(TetrisState, this, oldX, oldY, TransitionTime);
                 RotationTransition.FromTetromino(TetrisState, this, left ? -1 : -3, TransitionTime);
@@ -371,7 +371,7 @@ namespace Tetris
                 for (int x = 0; x < 4; x++)
                     for (int y = 0; y < 4; y++)
                         if (Structure[x, y])
-                            TetrisState.Grid[x + X, y + Y] = true;
+                            TetrisState.Grid[x + X, y + Y] = Color;
                 return false;
             }
         }
