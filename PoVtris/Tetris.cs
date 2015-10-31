@@ -1,7 +1,11 @@
-﻿using Microsoft.Xna.Framework;
+﻿#undef diagnose
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
+#if diagnose
+using System.Diagnostics;
+#endif
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,7 +32,7 @@ namespace Tetris
 
         public Tetromino current = null;
         public LinkedList<Tetromino> Tetrominoes = new LinkedList<Tetromino>();
-        public Dictionary<Tuple<int, int>, LinkedList<Transition>> Transistions = new Dictionary<Tuple<int, int>, LinkedList<Transition>>();
+        public Dictionary<Tuple<int, int>, Transition> Transitions = new Dictionary<Tuple<int, int>, Transition>();
 
         public bool GameOver = false;
 
@@ -74,9 +78,37 @@ namespace Tetris
             return GameOver;
         }
 
-        public void ReIndexTransitions(int x, int y)
+        public IEnumerable<Tuple<int, int>> ReIndexTransitions(IEnumerable<Tuple<int, int>> oldPositions, Func<Tuple<int, int>, Tuple<int, int>> transform)
         {
+            LinkedList<Transition> newTransitions = new LinkedList<Transition>();
+            LinkedList<Tuple<int, int>> newPositions = new LinkedList<Tuple<int, int>>();
 
+            foreach (Tuple<int, int> oldPos in oldPositions)
+            {
+                if (Transitions.ContainsKey(oldPos))
+                {
+                    Transition oldTrans = Transitions[oldPos];
+                    Transitions.Remove(oldPos);
+
+                    Tuple<int, int> newPos = transform(oldPos);
+                    oldTrans.FinalBlockTargetPosition = newPos;
+                    newPositions.AddLast(newPos);
+
+#if diagnose
+                    Debug.WriteLine("Reindexed ({0},{1}) to ({2},{3})", oldPos.Item1, oldPos.Item2, newPos.Item1, newPos.Item2);
+#endif
+                    oldTrans.FinalBlockTargetPosition = newPos;
+
+                    newTransitions.AddLast(oldTrans);
+                }
+                else
+                {
+                    newPositions.AddLast(transform(oldPos));
+                }
+            }
+            foreach (Transition newTrans in newTransitions)
+                Transitions.Add(newTrans.FinalBlockTargetPosition, newTrans);
+            return newPositions;
         }
 
         public void Draw(BasicEffect basicEffect, GameTime gametime)
@@ -102,7 +134,6 @@ namespace Tetris
                 {
                     if (Grid[x, y] != Color.Transparent)
                     {
-                        VertexPositionColor[] square = new VertexPositionColor[8];
 
                         Color fill = Grid[x, y];
                         Color outline = OutlineColours[fill];
@@ -111,41 +142,35 @@ namespace Tetris
 
                         float drawX = x;
                         float drawY = y;
-                        float rotationAngle = 0;
                         Vector2 rotationCenter = Vector2.Zero;
 
                         Tuple<int, int> XY = Tuple.Create(x, y);
 
-                        if (Transistions.ContainsKey(XY))
+                        Matrix transform = Matrix.Identity;
+                        if (Transitions.ContainsKey(XY))
                         {
-                            float scale = 1.0f / Transistions[XY].Count;
-                            Transition tr = Transistions[XY].First();
+                            Transition tr = Transitions[XY];
                             if (tr.TransitionStartTime == 0)
                                 tr.TransitionStartTime = gameTimeSeconds;
 
                             if ((gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime > 1)
-                                Transistions[XY].Remove(tr);
+                            {
+#if diagnose
+                                Debug.WriteLine("({0},{1}) removed", XY.Item1, XY.Item2);
+#endif
+                                Transitions.Remove(XY);
+                            }
                             else
                             {
-                                if (tr is RotationTransition)
-                                {
-                                    RotationTransition tRotate = tr as RotationTransition;
-                                    rotationCenter = tRotate.Center;
-                                    rotationAngle = tRotate.StartAngle * (float)Math.PI * (0.5f) * (gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime;
-                                }
-                                else if (tr is TranslationTransition)
-                                {
-                                    TranslationTransition tTranslate = tr as TranslationTransition;
-                                    drawX = tTranslate.StartX + (x - tTranslate.StartX) * (gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime;
-                                    drawY = tTranslate.StartY + (y - tTranslate.StartY) * (gameTimeSeconds - tr.TransitionStartTime) / tr.TransitionTime;
-                                }
+                                transform = Matrix.CreateTranslation(new Vector3(tr.RotationCenter, 0))
+                                    * Matrix.CreateRotationZ(-tr.RotationAngle * (tr.TransitionStartTime + tr.TransitionTime - gameTimeSeconds) / tr.TransitionTime)
+                                    * Matrix.CreateTranslation(new Vector3(-tr.RotationCenter - tr.Translation * (tr.TransitionStartTime + tr.TransitionTime - gameTimeSeconds) / tr.TransitionTime, 0));
                             }
-                            if (Transistions[XY].Count == 0)
-                                Transistions.Remove(XY);
                         }
 
-                        basicEffect.World = Matrix.CreateTranslation(new Vector3(-rotationCenter, 0)) * Matrix.CreateRotationZ(rotationAngle) * Matrix.CreateTranslation(new Vector3(rotationCenter, 0));
+                        basicEffect.World = transform;
 
+                        VertexPositionColor[] square = new VertexPositionColor[8];
                         square[0] = new VertexPositionColor(new Vector3(drawX, drawY, 0), outline);
                         square[1] = new VertexPositionColor(new Vector3(drawX + 1, drawY, 0), outline);
                         square[2] = new VertexPositionColor(new Vector3(drawX + 1, drawY + 1, 0), outline);
@@ -205,8 +230,16 @@ namespace Tetris
                     break;
 
                 if (lookingAtY != copyFromY)
+                {
+                    LinkedList<Tuple<int, int>> reindex = new LinkedList<Tuple<int, int>>();
                     for (int x = 0; x < Width; x++)
+                    {
+                        reindex.AddLast(Tuple.Create(x, copyFromY));
                         Grid[x, lookingAtY] = Grid[x, copyFromY];
+                    }
+                    ReIndexTransitions(reindex, t => Tuple.Create(t.Item1, lookingAtY));
+                    TranslationTransition.FromRow(this, copyFromY, lookingAtY, Tetromino.TransitionTime);
+                }
                 copyFromY--;
                 lookingAtY--;
             }

@@ -224,7 +224,7 @@ namespace Tetris
             }
 
 
-            if (gameTime.TotalGameTime.TotalSeconds - lastSeconds > 0.5)
+            if (gameTime.TotalGameTime.TotalSeconds - lastSeconds > 0.5f)
             {
                 lastSeconds = gameTime.TotalGameTime.TotalSeconds;
                 TetrisState.Update();

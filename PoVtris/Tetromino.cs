@@ -1,6 +1,10 @@
 ﻿using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
+
+#if diagnose
+using System.Diagnostics;
+#endif
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,7 +15,7 @@ namespace Tetris
     {
         public enum Shapes { I, S, Z, O, L, J, T };
 
-        const float TransitionTime = 0.1f;
+        public const float TransitionTime = 0.2f;
 
         const bool t = true, f = false;
         public static readonly Dictionary<Shapes, bool[,]> Structures = new Dictionary<Shapes, bool[,]>()
@@ -110,10 +114,19 @@ namespace Tetris
             }
         }
 
+        public static Tuple<int, int> RotationTransform(Tuple<int, int> pos, int n)
+        {
+            if (n == 0) return pos;
+            if (n == 1) return Tuple.Create(pos.Item2, 3 - pos.Item1);
+            if (n == 2) return Tuple.Create(3 - pos.Item1, 3 - pos.Item2);
+            if (n == 3) return Tuple.Create(3 - pos.Item2, pos.Item1);
+            else throw new ArgumentOutOfRangeException();
+        }
+
         public static readonly Dictionary<Shapes, Color> Colors = new Dictionary<Shapes, Color>() 
         { 
             { Shapes.I, Color.Cyan }, 
-            { Shapes.J, Color.Blue }, 
+            { Shapes.J, Color.Blue },
             { Shapes.L, Color.Orange }, 
             { Shapes.O, Color.Yellow }, 
             { Shapes.S, Color.Lime },
@@ -260,12 +273,20 @@ namespace Tetris
                         if (Structure[x, y])
                             TetrisState.Grid[x + X, y + Y] = Color.Transparent;
                 Y++;
-
+#if diagnose
+                Debug.WriteLine("Move (0, 1)");
+#endif
+                LinkedList<Tuple<int, int>> reindex = new LinkedList<Tuple<int, int>>();
                 for (int i = 0; i < 4; i++)
                     for (int j = 0; j < 4; j++)
                         if (Structure[i, j])
+                        {
                             TetrisState.Grid[i + X, j + Y] = Color;
+                            reindex.AddLast(Tuple.Create(X + i, Y + j - 1));
+                        }
 
+
+                TetrisState.ReIndexTransitions(reindex, t => Tuple.Create(t.Item1, t.Item2 + 1));
                 TranslationTransition.FromTetromino(TetrisState, this, X, Y - 1, TransitionTime);
             }
             while (collapse);
@@ -285,12 +306,19 @@ namespace Tetris
                     if (Structure[x, y])
                         TetrisState.Grid[x + X, y + Y] = Color.Transparent;
             X--;
-
+#if diagnose
+            Debug.WriteLine("Move (-1, 0)");
+#endif
+            LinkedList<Tuple<int, int>> reindex = new LinkedList<Tuple<int, int>>();
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
                     if (Structure[i, j])
+                    {
                         TetrisState.Grid[i + X, j + Y] = Color;
+                        reindex.AddLast(Tuple.Create(X + i + 1, Y + j));
+                    }
 
+            TetrisState.ReIndexTransitions(reindex, t => Tuple.Create(t.Item1 - 1, t.Item2));
             TranslationTransition.FromTetromino(TetrisState, this, X + 1, Y, TransitionTime);
         }
 
@@ -306,27 +334,36 @@ namespace Tetris
                     if (Structure[x, y])
                         TetrisState.Grid[x + X, y + Y] = Color.Transparent;
             X++;
-
+#if diagnose
+            Debug.WriteLine("Move (1, 0)");
+#endif
+            LinkedList<Tuple<int, int>> reindex = new LinkedList<Tuple<int, int>>();
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
                     if (Structure[i, j])
+                    {
                         TetrisState.Grid[i + X, j + Y] = Color;
+                        reindex.AddLast(Tuple.Create(X + i - 1, Y + j));
+                    }
 
+            TetrisState.ReIndexTransitions(reindex, t => Tuple.Create(t.Item1 + 1, t.Item2));
             TranslationTransition.FromTetromino(TetrisState, this, X - 1, Y, TransitionTime);
         }
 
         public bool Rotate(bool left)
         {
             int oldX = X, oldY = Y;
+            IEnumerable<Tuple<int, int>> reindex = new LinkedList<Tuple<int, int>>();
             //erase old location
             for (int x = 0; x < 4; x++)
                 for (int y = 0; y < 4; y++)
                     if (Structure[x, y])
+                    {
                         TetrisState.Grid[x + X, y + Y] = Color.Transparent;
+                        ((LinkedList<Tuple<int, int>>)reindex).AddLast(Tuple.Create(x + X, y + Y));
+                    }
 
             bool[,] candidateStructure = Rotate(Structure, left ? 1 : 3);
-
-
 
             //check wall collisions, and try to correct for them
             //is there a left collision?
@@ -352,15 +389,29 @@ namespace Tetris
 
             if (!failure)
             {
-                //we have a valid location, put the block there
+                //we have a valid location, put the tetromino there
+#if diagnose
+                Debug.WriteLine("tetra rotating");
+#endif
+
+                if (oldX != X || oldY != Y)
+                {
+                    reindex = TetrisState.ReIndexTransitions(reindex, t => Tuple.Create(t.Item1 + (X - oldX), t.Item2 + (Y - oldY)));
+                    TranslationTransition.FromTetromino(TetrisState, this, oldX, oldY, TransitionTime);
+                }
+
                 Structure = candidateStructure;
                 for (int i = 0; i < 4; i++)
                     for (int j = 0; j < 4; j++)
                         if (Structure[i, j])
                             TetrisState.Grid[i + X, j + Y] = Color;
-                if (oldX != X || oldY != Y)
-                    TranslationTransition.FromTetromino(TetrisState, this, oldX, oldY, TransitionTime);
-                RotationTransition.FromTetromino(TetrisState, this, left ? -1 : -3, TransitionTime);
+
+                TetrisState.ReIndexTransitions(reindex, t =>
+                    {
+                        Tuple<int, int> transformed = Tetromino.RotationTransform(Tuple.Create(t.Item1 - X, t.Item2 - Y), left ? 1 : 3);
+                        return Tuple.Create(transformed.Item1 + X, transformed.Item2 + Y);
+                    });
+                RotationTransition.FromTetromino(TetrisState, this, left ? -1 : 1, TransitionTime);
 
                 return true;
             }
